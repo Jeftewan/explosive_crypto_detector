@@ -88,6 +88,7 @@ def run_walk_forward(
     feature_df: pd.DataFrame,
     n_folds: int = WF_FOLDS,
     embargo_days: int = WF_EMBARGO_DAYS,
+    min_train_days: int = WF_MIN_TRAIN_DAYS,
 ) -> list[FoldResult]:
     """
     Run purged walk-forward CV. Returns one FoldResult per fold.
@@ -99,7 +100,10 @@ def run_walk_forward(
 
     # Use a single-symbol or cross-symbol index
     time_index = feature_df.index.unique().sort_values()
-    fold_defs = _make_folds(time_index, n_folds=n_folds, embargo_days=embargo_days)
+    fold_defs = _make_folds(
+        time_index, n_folds=n_folds, embargo_days=embargo_days,
+        min_train_days=min_train_days,
+    )
 
     results: list[FoldResult] = []
 
@@ -129,14 +133,19 @@ def run_walk_forward(
             col = f"rally_{threshold}_{horizon}h"
             if col not in train_df.columns:
                 continue
-            y = train_df[col].dropna()
-            if y.empty or y.nunique() < 2:
+            # Use positional numpy selection to avoid cartesian explosion
+            # when .loc is called on a non-unique DatetimeIndex (multi-symbol df).
+            valid_pos = train_df[col].notna().values  # numpy bool array
+            y_vals = train_df[col].values[valid_pos]
+            if len(y_vals) < 2 or len(np.unique(y_vals[~np.isnan(y_vals)])) < 2:
                 continue
+            X_fit = pd.DataFrame(X_train.values[valid_pos], columns=X_train.columns)
+            y_fit = pd.Series(y_vals)
 
             from ..scoring.logistic_l1 import train_model
             model = train_model(
-                X_train.loc[y.index],
-                y,
+                X_fit,
+                y_fit,
                 target_name=col,
                 threshold=threshold,
                 horizon_hours=horizon,

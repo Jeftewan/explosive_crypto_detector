@@ -79,7 +79,7 @@ def add_taker_indicators(df: pd.DataFrame, momentum_periods: int = FR_MOMENTUM_P
         df["taker_bs_extreme"] = np.nan
         return df
 
-    df["taker_bs_momentum"] = df["taker_bs_ratio"].pct_change(periods=momentum_periods)
+    df["taker_bs_momentum"] = df["taker_bs_ratio"].pct_change(periods=momentum_periods, fill_method=None)
     df["taker_bs_extreme"] = (df["taker_bs_ratio"] > 1.5).astype(float)
     return df
 
