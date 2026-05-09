@@ -175,33 +175,23 @@ def _fetch_period_endpoint(
     days: int,
 ) -> list:
     """
-    Generic paginator for OI/L-S/Taker endpoints.
+    Fetch period data (OI/L-S/Taker) for the last `days` days.
 
-    Key fix: do NOT send endTime on Binance period endpoints — passing
-    endTime=now causes a 400 because the current candle is still open.
-    Binance defaults endTime to the last *closed* period automatically.
-    Pagination stops when we receive fewer rows than the limit.
+    Does NOT send startTime — Binance returns the most recent available data
+    up to `limit` rows.  Passing startTime older than ~7-14 days returns a
+    -1130 error because these endpoints have a shorter availability window than
+    their documented "30 days" (in practice varies).  We fetch the latest page
+    and filter rows to the requested window afterward.
     """
-    start_ms = _days_ago_ms(days)
-    all_rows: list = []
-
-    while True:
-        rows = client.get(path, {
-            "symbol": symbol,
-            "period": period,
-            "startTime": start_ms,
-            "limit": _OI_LIMIT,
-        })
-        if not rows:
-            break
-        all_rows.extend(rows)
-        if len(rows) < _OI_LIMIT:
-            break
-        # Advance start past the last received row
-        last_ts = rows[-1].get("timestamp") or rows[-1].get("fundingTime", 0)
-        start_ms = last_ts + 1
-
-    return all_rows
+    rows = client.get(path, {
+        "symbol": symbol,
+        "period": period,
+        "limit": _OI_LIMIT,
+    })
+    if not rows:
+        return []
+    cutoff_ms = _days_ago_ms(days)
+    return [r for r in rows if r.get("timestamp", 0) >= cutoff_ms]
 
 
 # ─── Open Interest ────────────────────────────────────────────────────────────
