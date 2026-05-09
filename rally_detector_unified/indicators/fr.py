@@ -57,7 +57,7 @@ def add_fr_zscore(df: pd.DataFrame, window_days: int = FR_ZSCORE_WINDOW) -> pd.D
 
 def add_fr_momentum(df: pd.DataFrame, periods: int = FR_MOMENTUM_PERIODS) -> pd.DataFrame:
     """Rate of change of funding rate over N periods."""
-    df["fr_momentum"] = df["funding_rate"].pct_change(periods=periods)
+    df["fr_momentum"] = df["funding_rate"].pct_change(periods=periods, fill_method=None)
     return df
 
 

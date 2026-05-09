@@ -23,17 +23,19 @@ def _compute_targets(df: pd.DataFrame) -> pd.DataFrame:
     Uses real-hour forward returns from the close price on the hourly grid.
 
     Target = 1 if max close price in [t+1, t+horizon] exceeds close[t] * (1 + threshold/100).
+
+    Correct formula:
+        close.rolling(window=horizon).max() at t  =  max(close[t-horizon+1 : t+1])
+        .shift(-horizon)                     at t  =  max(close[t+1        : t+horizon+1])
+    This gives exactly the max over the NEXT `horizon` bars (t+1 … t+horizon).
     """
     close = df["close"]
     for threshold, horizon in TARGETS:
         col = f"rally_{threshold}_{horizon}h"
-        # Max future price within the horizon window
         target_price = close * (1 + threshold / 100)
-        # Rolling max over next `horizon` bars (forward-looking)
-        # We shift by -horizon so future max aligns with current bar
-        future_max = close[::-1].rolling(window=horizon, min_periods=1).max()[::-1].shift(-horizon)
+        future_max = close.rolling(window=horizon, min_periods=horizon).max().shift(-horizon)
         df[col] = (future_max >= target_price).astype(float)
-        # Last `horizon` rows have no future → set to NaN to avoid look-ahead
+        # Rows where the full horizon extends beyond the data → NaN (no look-ahead)
         df.loc[df.index[-horizon:], col] = np.nan
 
     return df
