@@ -57,6 +57,15 @@ class BinanceClient:
                 logger.warning("Server error %d. Waiting %.1fs (attempt %d)", resp.status_code, wait, attempt)
                 time.sleep(wait)
                 continue
+            if resp.status_code == 400:
+                # Log Binance error body (e.g. {"code":-1128,"msg":"..."}) before raising
+                try:
+                    body = resp.json()
+                    logger.error("Binance 400 — code=%s msg=%s | %s params=%s",
+                                 body.get("code"), body.get("msg"), path, params)
+                except Exception:
+                    logger.error("Binance 400 — %s | %s params=%s", resp.text[:200], path, params)
+                resp.raise_for_status()
             resp.raise_for_status()
             return resp.json()
         raise RuntimeError(f"Max retries exceeded for {url}")

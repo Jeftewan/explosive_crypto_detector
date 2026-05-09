@@ -165,6 +165,45 @@ def fetch_funding_rate_history(
     return df
 
 
+# ─── Helpers for period-aware endpoints ──────────────────────────────────────
+
+def _fetch_period_endpoint(
+    client: BinanceClient,
+    path: str,
+    symbol: str,
+    period: str,
+    days: int,
+) -> list:
+    """
+    Generic paginator for OI/L-S/Taker endpoints.
+
+    Key fix: do NOT send endTime on Binance period endpoints — passing
+    endTime=now causes a 400 because the current candle is still open.
+    Binance defaults endTime to the last *closed* period automatically.
+    Pagination stops when we receive fewer rows than the limit.
+    """
+    start_ms = _days_ago_ms(days)
+    all_rows: list = []
+
+    while True:
+        rows = client.get(path, {
+            "symbol": symbol,
+            "period": period,
+            "startTime": start_ms,
+            "limit": _OI_LIMIT,
+        })
+        if not rows:
+            break
+        all_rows.extend(rows)
+        if len(rows) < _OI_LIMIT:
+            break
+        # Advance start past the last received row
+        last_ts = rows[-1].get("timestamp") or rows[-1].get("fundingTime", 0)
+        start_ms = last_ts + 1
+
+    return all_rows
+
+
 # ─── Open Interest ────────────────────────────────────────────────────────────
 
 def fetch_open_interest_hist(
@@ -173,30 +212,12 @@ def fetch_open_interest_hist(
     days: int = OI_DAYS,
     interval: str = "4h",
 ) -> pd.DataFrame:
-    """Download open interest history (Binance limit: ~30 days)."""
-    start_ms = _days_ago_ms(days)
-    end_ms = _now_ms()
-    all_rows = []
-
-    while start_ms < end_ms:
-        rows = client.get("/futures/data/openInterestHist", {
-            "symbol": symbol,
-            "period": interval,
-            "startTime": start_ms,
-            "endTime": end_ms,
-            "limit": _OI_LIMIT,
-        })
-        if not rows:
-            break
-        all_rows.extend(rows)
-        start_ms = rows[-1]["timestamp"] + 1
-        if len(rows) < _OI_LIMIT:
-            break
-
-    if not all_rows:
+    """Download open interest history (Binance hard limit: ~30 days)."""
+    rows = _fetch_period_endpoint(client, "/futures/data/openInterestHist", symbol, interval, days)
+    if not rows:
         return pd.DataFrame()
 
-    df = pd.DataFrame(all_rows)
+    df = pd.DataFrame(rows)
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
     df["open_interest"] = df["sumOpenInterest"].astype(float)
     df["oi_value_usdt"] = df["sumOpenInterestValue"].astype(float)
@@ -214,29 +235,11 @@ def fetch_long_short_ratio(
     interval: str = "4h",
 ) -> pd.DataFrame:
     """Download global long/short account ratio."""
-    start_ms = _days_ago_ms(days)
-    end_ms = _now_ms()
-    all_rows = []
-
-    while start_ms < end_ms:
-        rows = client.get("/futures/data/globalLongShortAccountRatio", {
-            "symbol": symbol,
-            "period": interval,
-            "startTime": start_ms,
-            "endTime": end_ms,
-            "limit": _OI_LIMIT,
-        })
-        if not rows:
-            break
-        all_rows.extend(rows)
-        start_ms = rows[-1]["timestamp"] + 1
-        if len(rows) < _OI_LIMIT:
-            break
-
-    if not all_rows:
+    rows = _fetch_period_endpoint(client, "/futures/data/globalLongShortAccountRatio", symbol, interval, days)
+    if not rows:
         return pd.DataFrame()
 
-    df = pd.DataFrame(all_rows)
+    df = pd.DataFrame(rows)
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
     df["ls_account_ratio"] = df["longShortRatio"].astype(float)
     df["ls_long_pct"] = df["longAccount"].astype(float)
@@ -255,29 +258,11 @@ def fetch_top_trader_ratio(
     interval: str = "4h",
 ) -> pd.DataFrame:
     """Download top trader long/short position ratio (smart money proxy)."""
-    start_ms = _days_ago_ms(days)
-    end_ms = _now_ms()
-    all_rows = []
-
-    while start_ms < end_ms:
-        rows = client.get("/futures/data/topLongShortPositionRatio", {
-            "symbol": symbol,
-            "period": interval,
-            "startTime": start_ms,
-            "endTime": end_ms,
-            "limit": _OI_LIMIT,
-        })
-        if not rows:
-            break
-        all_rows.extend(rows)
-        start_ms = rows[-1]["timestamp"] + 1
-        if len(rows) < _OI_LIMIT:
-            break
-
-    if not all_rows:
+    rows = _fetch_period_endpoint(client, "/futures/data/topLongShortPositionRatio", symbol, interval, days)
+    if not rows:
         return pd.DataFrame()
 
-    df = pd.DataFrame(all_rows)
+    df = pd.DataFrame(rows)
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
     df["top_trader_ls_ratio"] = df["longShortRatio"].astype(float)
     df["top_trader_long_pct"] = df["longAccount"].astype(float)
@@ -296,47 +281,20 @@ def fetch_taker_volume(
     interval: str = "4h",
 ) -> pd.DataFrame:
     """Download taker buy/sell volume ratio."""
-    start_ms = _days_ago_ms(days)
-    end_ms = _now_ms()
-    all_rows = []
-
-    while start_ms < end_ms:
-        rows = client.get("/futures/data/takerlongshortRatio", {
-            "symbol": symbol,
-            "period": interval,
-            "startTime": start_ms,
-            "endTime": end_ms,
-            "limit": _OI_LIMIT,
-        })
-        if not rows:
-            break
-        all_rows.extend(rows)
-        start_ms = rows[-1]["timestamp"] + 1
-        if len(rows) < _OI_LIMIT:
-            break
-
-    if not all_rows:
+    rows = _fetch_period_endpoint(client, "/futures/data/takerlongshortRatio", symbol, interval, days)
+    if not rows:
         return pd.DataFrame()
 
-    df = pd.DataFrame(all_rows)
+    df = pd.DataFrame(rows)
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
-    df["taker_buy_vol"] = df["buySell"].apply(
-        lambda x: float(x) if isinstance(x, (int, float, str)) else float(x.get("buyVol", 0))
-    )
-    # Binance returns buySell ratio directly in this endpoint
-    df["taker_bs_ratio"] = df["buySell"].apply(
-        lambda x: float(x) if isinstance(x, (int, float, str)) else float(x.get("buySellRatio", 1))
-    )
-    # Re-parse properly
-    df["taker_bs_ratio"] = df["buySellRatio"].astype(float) if "buySellRatio" in df.columns else df["taker_bs_ratio"]
-    df["taker_buy_vol"] = df["buyVol"].astype(float) if "buyVol" in df.columns else df["taker_buy_vol"]
-    df["taker_sell_vol"] = df["sellVol"].astype(float) if "sellVol" in df.columns else float("nan")
+    for col, alias in [("buySellRatio", "taker_bs_ratio"), ("buyVol", "taker_buy_vol"), ("sellVol", "taker_sell_vol")]:
+        if col in df.columns:
+            df[alias] = df[col].astype(float)
+        else:
+            df[alias] = float("nan")
 
-    cols = ["timestamp", "taker_bs_ratio", "taker_buy_vol", "taker_sell_vol"]
-    available = [c for c in cols if c in df.columns or c == "timestamp"]
-    df = df.reset_index(drop=True)
-    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True) if not pd.api.types.is_datetime64_any_dtype(df["timestamp"]) else df["timestamp"]
-    df = df.drop_duplicates("timestamp").sort_values("timestamp")
+    keep = [c for c in ["timestamp", "taker_bs_ratio", "taker_buy_vol", "taker_sell_vol"] if c in df.columns]
+    df = df[keep].drop_duplicates("timestamp").sort_values("timestamp")
     df.set_index("timestamp", inplace=True)
     return df
 
@@ -348,15 +306,27 @@ def fetch_all_for_symbol(
     symbol: str,
     interval: str = DEFAULT_KLINE_INTERVAL,
 ) -> dict[str, pd.DataFrame]:
-    """Fetch all data for a single symbol. Returns dict keyed by data type."""
-    return {
-        "klines": fetch_klines(client, symbol, interval),
-        "funding_rate": fetch_funding_rate_history(client, symbol),
-        "open_interest": fetch_open_interest_hist(client, symbol, interval=interval),
-        "long_short": fetch_long_short_ratio(client, symbol, interval=interval),
-        "top_trader": fetch_top_trader_ratio(client, symbol, interval=interval),
-        "taker": fetch_taker_volume(client, symbol, interval=interval),
+    """
+    Fetch all data for a single symbol. Returns dict keyed by data type.
+    Each endpoint is fetched independently — a failure on one (e.g. OI/L-S/Taker
+    not available for a symbol) returns an empty DataFrame for that type only.
+    """
+    result: dict[str, pd.DataFrame] = {}
+    fetchers = {
+        "klines":        lambda: fetch_klines(client, symbol, interval),
+        "funding_rate":  lambda: fetch_funding_rate_history(client, symbol),
+        "open_interest": lambda: fetch_open_interest_hist(client, symbol, interval=interval),
+        "long_short":    lambda: fetch_long_short_ratio(client, symbol, interval=interval),
+        "top_trader":    lambda: fetch_top_trader_ratio(client, symbol, interval=interval),
+        "taker":         lambda: fetch_taker_volume(client, symbol, interval=interval),
     }
+    for dtype, fn in fetchers.items():
+        try:
+            result[dtype] = fn()
+        except Exception as exc:
+            logger.warning("%s: %s endpoint failed (%s) — using empty DataFrame", symbol, dtype, exc)
+            result[dtype] = pd.DataFrame()
+    return result
 
 
 def fetch_all_symbols(
