@@ -58,6 +58,8 @@ def parse_args(argv=None):
                         help="Backtest start date YYYY-MM-DD")
     parser.add_argument("--end-date", type=str, default=None,
                         help="Backtest end date YYYY-MM-DD")
+    parser.add_argument("--max-days", type=int, default=None,
+                        help="Limit backtest to last N days (reduces memory for large universes)")
     parser.add_argument("--no-html", action="store_true",
                         help="Skip generating the HTML dashboard")
     parser.add_argument("--verbose", "-v", action="store_true",
@@ -92,6 +94,10 @@ def main(argv=None):
     )
 
     # Optional date slice
+    if args.max_days:
+        cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=args.max_days)
+        unified_df = unified_df[unified_df.index >= cutoff]
+        log.info("Limiting to last %d days (from %s)", args.max_days, cutoff.date())
     if args.start_date:
         unified_df = unified_df[unified_df.index >= pd.Timestamp(args.start_date, tz="UTC")]
     if args.end_date:
@@ -113,7 +119,16 @@ def main(argv=None):
 
     # ── 3. Walk-forward CV ────────────────────────────────────────────────────
     log.info("Phase 3/5: Walk-forward cross-validation...")
-    fold_results = run_walk_forward(feature_df)
+    wf_kwargs: dict = {}
+    if args.max_days and args.max_days < 180:
+        # Scale down walk-forward params proportionally for short windows
+        wf_kwargs = {
+            "min_train_days": max(30, args.max_days // 2),
+            "n_folds": 2 if args.max_days < 120 else 3,
+        }
+        log.info("Short window detected: using min_train_days=%d, n_folds=%d",
+                 wf_kwargs["min_train_days"], wf_kwargs["n_folds"])
+    fold_results = run_walk_forward(feature_df, **wf_kwargs)
 
     # ── 4. Final model on full data ───────────────────────────────────────────
     log.info("Phase 4/5: Training final model on full data...")
