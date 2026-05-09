@@ -69,6 +69,8 @@ def build_feature_matrix(df: pd.DataFrame) -> pd.DataFrame:
     """
     Extract only the feature columns that exist in df.
     Missing columns are filled with NaN (will be imputed downstream).
+    Infinities (from pct_change with zero denominators, log of 0, etc.)
+    are replaced with NaN so the SimpleImputer can handle them.
     """
     available = [c for c in FEATURE_COLUMNS if c in df.columns]
     missing = [c for c in FEATURE_COLUMNS if c not in df.columns]
@@ -79,7 +81,9 @@ def build_feature_matrix(df: pd.DataFrame) -> pd.DataFrame:
     for c in missing:
         X[c] = np.nan
 
-    return X[FEATURE_COLUMNS]
+    X = X[FEATURE_COLUMNS]
+    X = X.replace([np.inf, -np.inf], np.nan)
+    return X
 
 
 def build_sklearn_pipeline() -> Pipeline:
