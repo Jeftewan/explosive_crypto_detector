@@ -32,24 +32,31 @@ DEFAULT_KLINE_INTERVAL = "4h"
 CACHE_TTL_HOURS = 24
 CACHE_COMPRESSION = "snappy"
 
-# ─── Walk-forward ─────────────────────────────────────────────────────────────
-WF_EMBARGO_DAYS = 21            # max horizon is 504h ≈ 21 days
-WF_FOLDS = 5
-WF_MIN_TRAIN_DAYS = 150
-
 # ─── Return targets ───────────────────────────────────────────────────────────
-# (threshold_pct, horizon_hours)
+# (threshold_pct, horizon_hours) — 3 primarios: corto / medio / largo
 TARGETS = [
-    (30,   24),
     (50,   24),
-    (100,  24),
-    (50,   72),
     (100,  72),
-    (200,  72),
-    (100,  168),
     (200,  168),
-    (500,  504),
 ]
+
+# ─── Walk-forward ─────────────────────────────────────────────────────────────
+# Embargo dinámico = max horizonte / 24h. Con TARGETS arriba (max 168h) ⇒ 7 días.
+WF_EMBARGO_DAYS = max(h for _, h in TARGETS) // 24
+WF_FOLDS = 2
+WF_MIN_TRAIN_DAYS = 10
+
+# ─── Training hyperparameters ─────────────────────────────────────────────────
+# LogisticRegression L1 con liblinear: ~10-50× más rápido que saga en 8 GB RAM.
+LR_SOLVER = "liblinear"
+LR_CS_GRID = 4                  # número de Cs para LogisticRegressionCV (antes 10)
+LR_CV_FOLDS = 3                 # folds internos del CV de C (antes 5)
+LR_MAX_ITER = 500               # antes 2000
+LR_TOL = 1e-3                   # antes 1e-4
+LR_N_JOBS = 1                   # 8 GB RAM ⇒ evitar duplicar dataset por worker
+# Submuestreo negativo cuando n_train > umbral. Mantiene todos los positivos.
+TRAIN_SUBSAMPLE_NEG_RATIO = 4   # negativos por positivo
+TRAIN_SUBSAMPLE_THRESHOLD = 50_000  # filas; por debajo no submuestrea
 
 # ─── Feature engineering ──────────────────────────────────────────────────────
 FR_WINDOW_DAYS = 7

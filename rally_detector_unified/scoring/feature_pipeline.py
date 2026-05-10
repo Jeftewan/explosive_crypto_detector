@@ -71,6 +71,7 @@ def build_feature_matrix(df: pd.DataFrame) -> pd.DataFrame:
     Missing columns are filled with NaN (will be imputed downstream).
     Infinities (from pct_change with zero denominators, log of 0, etc.)
     are replaced with NaN so the SimpleImputer can handle them.
+    Output dtype is float32 to halve RAM usage vs float64.
     """
     available = [c for c in FEATURE_COLUMNS if c in df.columns]
     missing = [c for c in FEATURE_COLUMNS if c not in df.columns]
@@ -83,19 +84,23 @@ def build_feature_matrix(df: pd.DataFrame) -> pd.DataFrame:
 
     X = X[FEATURE_COLUMNS]
     X = X.replace([np.inf, -np.inf], np.nan)
-    return X
+    return X.astype(np.float32)
 
 
-def build_sklearn_pipeline() -> Pipeline:
+def build_sklearn_pipeline(add_indicator: bool = False) -> Pipeline:
     """
-    Scikit-learn pipeline:
-      1. Median imputation with missing-value indicator columns
+    Scikit-learn preprocessing pipeline:
+      1. Median imputation (optionally with missing-value indicator columns)
       2. Standard scaling (mean=0, std=1)
+
+    `add_indicator=False` halves the column count vs the previous default
+    and is sufficient when missing-value structure is captured by features
+    like `oi_zscore` already being NaN in periods without OI data.
     """
     return Pipeline([
         (
             "imputer",
-            SimpleImputer(strategy="median", add_indicator=True),
+            SimpleImputer(strategy="median", add_indicator=add_indicator),
         ),
         (
             "scaler",
