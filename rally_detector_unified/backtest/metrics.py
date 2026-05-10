@@ -104,10 +104,12 @@ def deflated_sharpe_ratio(
     """
     if n_obs <= 1 or n_trials <= 1:
         return float("nan")
+    # Euler-Mascheroni constant (not exposed by scipy.stats.norm)
+    gamma = 0.5772156649015329
     # Expected maximum Sharpe under n_trials iid trials
     sr_max = (
-        (1 - stats.norm.euler_mascheroni) * stats.norm.ppf(1 - 1 / n_trials)
-        + stats.norm.euler_mascheroni * stats.norm.ppf(1 - 1 / (n_trials * np.e))
+        (1 - gamma) * stats.norm.ppf(1 - 1 / n_trials)
+        + gamma * stats.norm.ppf(1 - 1 / (n_trials * np.e))
     )
     # Variance of Sharpe ratio
     sr_var = (1 + 0.5 * sharpe_obs ** 2 - skew * sharpe_obs + (kurt - 3) / 4 * sharpe_obs ** 2) / n_obs
