@@ -32,7 +32,6 @@ def generate_report(
     optimal_holding: pd.DataFrame,
     regime_breakdown: pd.DataFrame,
     rally_types: pd.DataFrame,
-    ground_truth: pd.DataFrame,
     output_path: Path | None = None,
 ) -> str:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -106,19 +105,13 @@ def generate_report(
     lines.append(_section("Rally Type Breakdown (A/B/C)"))
     lines.append(_df_to_md(rally_types))
 
-    # ── Ground truth validation ───────────────────────────────────────────────
-    lines.append(_section("Ground Truth Validation (13 Real Trades)"))
-    lines.append("> ⚠️ **Limitation:** n=13 is too small for statistical conclusions. Sanity check only.\n\n")
-    lines.append(_df_to_md(ground_truth))
-
     # ── Limitations ───────────────────────────────────────────────────────────
     lines.append(_section("Known Limitations"))
     lines.append("""1. **No fees/slippage** — returns are gross.
 2. **Survivorship bias** — only symbols listed today. Delisted tokens not included.
 3. **OI/L-S/Taker only last 30 days** — signal quality for those indicators validated on 30d only.
 4. **Single market cycle** — 365 days may capture only one bull/bear regime.
-5. **user_history: 13 trades** — sanity check, not validation.
-6. **Predictive, not causal** — learned correlations may break if market structure changes.
+5. **Predictive, not causal** — learned correlations may break if market structure changes.
 """)
 
     report = "".join(lines)

@@ -18,30 +18,33 @@ def correlation_analysis(
     if target_col not in feature_df.columns:
         return pd.DataFrame()
 
-    y = feature_df[target_col].dropna()
     available = [c for c in FEATURE_COLUMNS if c in feature_df.columns]
     records = []
 
     for feat in available:
-        x = feature_df[feat].reindex(y.index).dropna()
-        common = y.reindex(x.index).dropna()
-        x = x.reindex(common.index)
-
-        if len(common) < 20:
+        # Drop rows where either column is NaN. Positional alignment is
+        # preserved because both come from the same row of feature_df, so
+        # no reindex is needed (and reindex would crash on the duplicated
+        # multi-symbol DatetimeIndex).
+        pair = feature_df[[feat, target_col]].dropna()
+        if len(pair) < 20:
             continue
+        x = pair[feat].values
+        y = pair[target_col].values
 
         try:
-            pearson_r, pearson_p = scipy_stats.pearsonr(x, common)
+            pearson_r, pearson_p = scipy_stats.pearsonr(x, y)
         except Exception:
             pearson_r, pearson_p = float("nan"), float("nan")
 
         try:
-            spearman_r, spearman_p = scipy_stats.spearmanr(x, common)
+            spearman_r, spearman_p = scipy_stats.spearmanr(x, y)
         except Exception:
             spearman_r, spearman_p = float("nan"), float("nan")
 
         records.append({
             "feature": feat,
+            "n": int(len(pair)),
             "pearson_r": round(pearson_r, 4),
             "pearson_p": round(pearson_p, 4),
             "spearman_r": round(spearman_r, 4),
