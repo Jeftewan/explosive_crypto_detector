@@ -30,6 +30,9 @@ def market_regime_breakdown(
         sub_feat = feature_df.iloc[mask]
         sub_pred = predictions.iloc[mask]
 
+        if sub_feat.empty:
+            continue
+
         for threshold, horizon in TARGETS:
             target_col = f"rally_{threshold}_{horizon}h"
             proba_col = f"proba_{target_col}"
