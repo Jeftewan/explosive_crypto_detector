@@ -119,20 +119,12 @@ def main(argv=None):
 
     # ── 3. Walk-forward CV ────────────────────────────────────────────────────
     log.info("Phase 3/5: Walk-forward cross-validation...")
-    wf_kwargs: dict = {}
-    if args.max_days and args.max_days < 180:
-        # Scale down walk-forward params proportionally for short windows
-        wf_kwargs = {
-            "min_train_days": max(30, args.max_days // 2),
-            "n_folds": 2 if args.max_days < 120 else 3,
-        }
-        log.info("Short window detected: using min_train_days=%d, n_folds=%d",
-                 wf_kwargs["min_train_days"], wf_kwargs["n_folds"])
-    fold_results = run_walk_forward(feature_df, **wf_kwargs)
+    fold_results, frozen_Cs = run_walk_forward(feature_df)
 
     # ── 4. Final model on full data ───────────────────────────────────────────
-    log.info("Phase 4/5: Training final model on full data...")
-    final_models = train_all_models(feature_df)
+    # Reuse the C values picked in fold 1 → no second hyperparameter search.
+    log.info("Phase 4/5: Training final model on full data (frozen Cs)...")
+    final_models, _ = train_all_models(feature_df, frozen_Cs=frozen_Cs or None)
     predictions = predict_proba_all(feature_df, final_models)
 
     # ── 5. All analyses ───────────────────────────────────────────────────────
