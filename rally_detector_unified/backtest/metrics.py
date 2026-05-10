@@ -24,6 +24,8 @@ def hit_rate(y_true: np.ndarray, y_pred_proba: np.ndarray, threshold: float = 0.
 
 def precision_at_decile(y_true: np.ndarray, y_pred_proba: np.ndarray, decile: float = 0.9) -> float:
     """Hit rate in the top `decile` fraction of predictions."""
+    if len(y_pred_proba) == 0:
+        return float("nan")
     cutoff = np.quantile(y_pred_proba, decile)
     mask = y_pred_proba >= cutoff
     if mask.sum() == 0:
