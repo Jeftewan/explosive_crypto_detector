@@ -7,6 +7,7 @@ import pandas as pd
 
 from ..config import TARGETS
 from ..analysis.multi_profile import PROFILES, _apply_profile
+from ._helpers import forward_returns_by_symbol, positional_select
 
 
 def optimal_holding_analysis(
@@ -22,8 +23,8 @@ def optimal_holding_analysis(
     records = []
 
     for profile_name, conditions in PROFILES.items():
-        mask = _apply_profile(feature_df, conditions)
-        n = mask.sum()
+        mask_arr = _apply_profile(feature_df, conditions).values
+        n = int(mask_arr.sum())
         if n < 10:
             continue
 
@@ -32,13 +33,13 @@ def optimal_holding_analysis(
             if target_col not in feature_df.columns or "close" not in feature_df.columns:
                 continue
 
-            fwd_return = feature_df["close"].pct_change(periods=horizon).shift(-horizon)
-            signal_returns = fwd_return[mask].dropna()
+            fwd_return = forward_returns_by_symbol(feature_df, horizon=horizon)
+            signal_returns = pd.Series(positional_select(fwd_return, mask_arr)).dropna()
 
             if len(signal_returns) < 5:
                 continue
 
-            hit = feature_df[target_col][mask].mean()
+            hit = float(np.nanmean(positional_select(feature_df[target_col].values, mask_arr)))
 
             records.append({
                 "profile": profile_name,

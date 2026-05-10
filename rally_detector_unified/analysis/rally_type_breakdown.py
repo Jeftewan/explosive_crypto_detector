@@ -5,7 +5,10 @@ Type A (silent accumulation): BB Squeeze + OBV positive + FR neutral
 Type B (short squeeze):       OI drops + FR negative + L/S extreme
 Type C (leveraged):           FR↑ + OI↑ + Taker Buy↑
 """
+import numpy as np
 import pandas as pd
+
+from ._helpers import forward_returns_by_symbol, positional_select
 
 
 RALLY_TYPES = {
@@ -56,19 +59,25 @@ def rally_type_breakdown(
     except Exception:
         horizon = 72
 
-    fwd_return = feature_df["close"].pct_change(periods=horizon).shift(-horizon) if "close" in feature_df.columns else pd.Series(dtype=float)
+    fwd_return = (
+        forward_returns_by_symbol(feature_df, horizon=horizon)
+        if "close" in feature_df.columns else None
+    )
     y = feature_df[target_col]
     base = y.mean()
     records = []
 
     for rtype, conditions in RALLY_TYPES.items():
-        mask = _apply_type(feature_df, conditions)
-        n = mask.sum()
+        mask_arr = _apply_type(feature_df, conditions).values
+        n = int(mask_arr.sum())
         if n < 5:
             continue
 
-        hit = y[mask].mean()
-        mean_ret = fwd_return[mask].mean() if not fwd_return.empty else float("nan")
+        hit = float(np.nanmean(positional_select(y.values, mask_arr)))
+        mean_ret = (
+            float(np.nanmean(positional_select(fwd_return, mask_arr)))
+            if fwd_return is not None else float("nan")
+        )
         records.append({
             "rally_type": rtype,
             "n": int(n),

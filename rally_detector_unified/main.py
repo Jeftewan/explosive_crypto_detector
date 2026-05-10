@@ -20,7 +20,6 @@ from .data.binance_fetcher import fetch_klines
 from .data.binance_client import BinanceClient
 from .backtest.feature_builder import build_features_universe
 from .backtest.walk_forward import run_walk_forward
-from .backtest.ground_truth import validate_against_user_history
 from .scoring.logistic_l1 import train_all_models, predict_proba_all
 from .analysis.score_buckets import score_buckets_analysis
 from .analysis.multi_profile import multi_profile_analysis
@@ -147,7 +146,6 @@ def main(argv=None):
     holding = optimal_holding_analysis(feature_df)
     regime = market_regime_breakdown(feature_df, predictions)
     rtypes = rally_type_breakdown(feature_df, target_col=primary_target)
-    gt = validate_against_user_history(predictions, feature_df)
 
     # ── 6. Report ─────────────────────────────────────────────────────────────
     log.info("Writing report...")
@@ -164,7 +162,6 @@ def main(argv=None):
         optimal_holding=holding,
         regime_breakdown=regime,
         rally_types=rtypes,
-        ground_truth=gt,
     )
 
     if not args.no_html:

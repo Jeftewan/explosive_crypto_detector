@@ -5,6 +5,8 @@ Also: the "1 of 10 that rises x20" analysis (SPECIAL SECTION from plan).
 import numpy as np
 import pandas as pd
 
+from ._helpers import forward_returns_by_symbol, positional_select
+
 
 def simulate_equal_weight(
     feature_df: pd.DataFrame,
@@ -29,10 +31,12 @@ def simulate_equal_weight(
         return {}
 
     # Build signal universe: rows above min_proba threshold
-    mask = predictions[proba_col] >= min_proba
-    y = feature_df[target_col][mask]
-    returns = feature_df["close"].pct_change(periods=1).shift(-1)  # simplified 1-bar return
-    signal_returns = returns[mask]
+    mask = (predictions[proba_col] >= min_proba).values
+    y = positional_select(feature_df[target_col].values, mask)
+    # Forward 1-bar return computed per-symbol so it doesn't cross
+    # cripto boundaries in the long-format multi-symbol DataFrame.
+    returns = forward_returns_by_symbol(feature_df, horizon=1)
+    signal_returns = pd.Series(positional_select(returns, mask))
 
     if len(y) < basket_size:
         return {"error": f"Not enough signals ({len(y)}) for basket_size={basket_size}"}
@@ -53,7 +57,7 @@ def simulate_equal_weight(
     return {
         "target": target_col,
         "n_signals": int(len(y)),
-        "hit_rate": float(y.mean()),
+        "hit_rate": float(np.nanmean(y)),
         "return_distribution": {
             "p10": float(np.percentile(pnls, 10)),
             "p25": float(np.percentile(pnls, 25)),
@@ -87,10 +91,11 @@ def outlier_contribution_analysis(
     except Exception:
         horizon = 72
 
-    fwd_return = feature_df["close"].pct_change(periods=horizon).shift(-horizon)
+    fwd_return = forward_returns_by_symbol(feature_df, horizon=horizon)
     y = feature_df[target_col]
 
-    signal_returns = fwd_return[y == 1].dropna()
+    pos_mask = (y == 1).values
+    signal_returns = pd.Series(positional_select(fwd_return, pos_mask)).dropna()
     if len(signal_returns) == 0:
         return {}
 

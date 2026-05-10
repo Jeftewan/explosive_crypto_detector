@@ -23,9 +23,12 @@ def market_regime_breakdown(
 
     records = []
     for regime_val, regime_label in [(1, "bull"), (0, "bear")]:
-        mask = feature_df["btc_regime_bull"] == regime_val
-        sub_feat = feature_df[mask]
-        sub_pred = predictions[mask]
+        # Positional alignment: predictions and feature_df share row order
+        # (predict_proba_all preserves input index), but their DatetimeIndex
+        # is duplicated across symbols, so use .iloc with a numpy mask.
+        mask = (feature_df["btc_regime_bull"] == regime_val).values
+        sub_feat = feature_df.iloc[mask]
+        sub_pred = predictions.iloc[mask]
 
         for threshold, horizon in TARGETS:
             target_col = f"rally_{threshold}_{horizon}h"
